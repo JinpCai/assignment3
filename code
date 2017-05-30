@@ -1,0 +1,126 @@
+	ldr r10, =0b01010101010101010101010101010101
+	GPIOx_ODR_clear E, 12
+	@set priority
+	NVIC_IPR_set_priority 6,1
+	NVIC_IPR_set_priority 7,0
+	@r5 is the receiver
+	ldr r5, =0x20000000
+	ldr r0, =#0
+	str r0, [r5]
+	bl send_data
+end:
+	b end
+send_data:
+	push {lr}
+	@ open control line
+	GPIOx_ODR_set E, 12
+	@set sender data counter
+	mov r9, #0
+	@r6 is the counter
+	mov r6, #0
+	@counter to 32 and back.
+	check_data:
+		  @rotate the highest bit data to lowest bit
+		  ror r10, #31
+		  @use and to check whether 0 or 1
+		  ands r11, r10, #1
+		  beq send_zero
+		  b send_one
+	send_one:
+		  @if is one, set bit
+		  GPIOx_ODR_set E, 14
+		  nop
+		  nop
+		  nop
+		  b send_finish
+	send_zero:
+		  @if that is zero, clear bit
+		  GPIOx_ODR_clear E, 14
+		  nop
+		  nop
+		  nop
+		  @after set or clear, we should toggle
+		  b send_finish
+	send_finish:
+		  @ toggle clock
+		  GPIOx_ODR_toggle E, 13
+		  @counter add one
+		  add r9, #1
+		  @compare to 32 bit
+		  cmp r9, #32
+		  @if equals to 32, means have finished 32 bits transmission
+		  beq disable_control
+		  @else send next bit
+		  b check_data
+	disable_control:
+		  @when finish transmit 32 bit, disable control line
+		  GPIOx_ODR_clear E, 12
+		  mov r9, #0
+
+	pop {lr}
+	bx lr
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@ control line interrupt
+.type EXTI0_IRQHandler, %function
+EXTI0_IRQHandler:
+		push {lr}
+		@ mark this interrupt as "cleared" (i.e. no longer pending)
+		EXTI_PR_clear_pending 0
+		GPIOx_IDR_read H, 0
+		@ central joystick button (PA0) handler code goes here
+		beq disable
+		b   enable
+	enable:
+		NVIC_EXTI1_enable
+		b back_control
+	disable:
+		NVIC_EXTI1_disable
+		@seperate the reciver
+		@clear the counter
+		@r7 is the varience,
+		@r8 is the low 16 bit we want,
+		@r5 is the data we accept
+	decoder:
+		ands r7, r5, #1
+		adds r8, r8, r7
+		lsl  r8, #1
+		lsr  r5, #1
+		add  r6, #1
+		@counter to 32 and back.
+		cmp  r6, #16
+		blt decoder
+@@	play sound
+		@r8 is the low 16 bits, r5 is the high 16 bits
+	    b back_control
+	back_control:
+	   pop {lr}
+	   bx lr
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@	  clock interrupt
+.type EXTI1_IRQHandler, %function
+EXTI1_IRQHandler:
+	push {lr}
+	@ mark this interrupt as "cleared" (i.e. no longer pending)
+	EXTI_PR_clear_pending 1
+	read_data:
+		GPIOx_IDR_read H, 1
+		beq add_zero
+		b add_one
+	    @r4 is adder
+		add_zero:
+			ldr r5, =0x20000000
+			lsl r5, #1
+			add r5, r5, #0
+			str r5, [r5]
+			b clock_back
+		add_one:
+			ldr r5, =0x20000000
+			lsl r5, #1
+			add r5, r5, #1
+			str r5, [r5]
+			b clock_back
+	clock_back:
+		pop {lr}
+		bx lr
+
+  @ good luck!
