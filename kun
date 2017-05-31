@@ -1,0 +1,219 @@
+   ldr r0, =#440
+ ldr r1, =0x7fff
+ bl change_square
+
+ ldr r4, =#48000
+ ldr r5, =#47999
+ mov r6, #0
+ ldr r7, =notes
+ mov r10, #0
+
+ NVIC_IPR_set_priority 6, 1
+ NVIC_IPR_set_priority 7, 0
+
+ b play
+
+play:
+ bl play_square
+ mov r9, #8
+ mul r8, r6, r9
+ ldr r9, [r7, r8]
+ add r8, #4
+ ldr r10, [r7, r8]
+ lsl r9, #16
+ add r9, r10
+ add r5, #1
+ cmp r4, r5
+ beq interrupt
+ b play
+
+.type EXTI0_IRQHandler, %function
+EXTI0_IRQHandler:
+ push {lr}
+ EXTI_PR_clear_pending 0
+ GPIOx_IDR_read H, 0
+ bgt closeControlLine
+ bl onInterrupt
+backToHandler:
+ pop {lr}
+ bx lr
+closeControlLine:
+ GPIOx_ODR_clear E, 12
+ b backToHandler
+
+.type EXTI1_IRQHandler, %function
+EXTI1_IRQHandler:
+ push {lr}
+ EXTI_PR_clear_pending 0
+ bl onClockInterrupt
+ pop {lr}
+ bx lr
+
+interrupt:
+ push {lr}
+ mov r5, #0
+ add r6, #1
+ GPIOx_ODR_set E, 12
+ pop {lr}
+ bx lr
+
+interruptClock:
+ push {lr}
+ add r10, #1
+ GPIOx_ODR_toggle E, 13
+ pop {lr}
+ bx lr
+
+preInterruptClock:
+ bl interruptClock
+ b backInterruptClock
+
+clearCounterForR6:
+ mov r6, #0
+ b back
+
+onInterrupt:
+ push {lr}
+ NVIC_EXTI1_enable
+ mov r10, #0
+backInterruptClock:
+ cmp r10, #32
+ beq skipWrite
+ bl writeDataLine
+ b preInterruptClock
+skipWrite:
+ NVIC_EXTI1_disable
+ GPIOx_ODR_clear E, 12
+ ror r11, #1
+ mov r0, r11
+ lsr r0, #16
+ mov r1, r11
+ lsl r1, #16
+ lsr r1, #16
+ bl change_square
+
+ cmp r6, #32
+ beq clearCounterForR6
+back:
+ pop {lr}
+ bx lr
+
+onClockInterrupt:
+ push {lr}
+
+ bl receiveBit
+
+ pop {lr}
+ bx lr
+
+
+writeDataLine:
+ push {lr}
+ ror r9, #31
+ and r8, r9, #1
+ cmp r8, #1
+ beq writeData
+ GPIOx_ODR_clear E, 14
+backWrite:
+ pop {lr}
+ bx lr
+writeData:
+ GPIOx_ODR_set E, 14
+ b backWrite
+
+receiveBit:
+ push {lr}
+ GPIOx_IDR_read E, 11
+ beq skip
+ add r11, #1
+skip:
+ lsl r11, #1
+ pop {lr}
+ bx lr
+
+factors:
+.word 2
+.word 4
+.word 8
+.word 5
+.word 10
+.word 9
+.word 7
+.word 3
+
+notes:
+.word 440
+.word 32767
+.word 440
+.word 0
+.word 440
+.word 0
+//
+.word 523
+.word 32767
+.word 523
+.word 0
+.word 523
+.word 0
+//
+.word 440
+.word 32767
+.word 440
+.word 0
+//
+.word 440
+.word 32767
+.word 440
+.word 0
+.word 440
+.word 0
+//
+.word 523
+.word 32767
+.word 523
+.word 0
+.word 523
+.word 0
+//
+.word 440
+.word 32767
+.word 440
+.word 0
+//
+.word 440
+.word 32767
+.word 440
+.word 0
+.word 440
+.word 0
+//
+.word 523
+.word 32767
+.word 523
+.word 0
+.word 523
+.word 0
+//
+.word 440
+.word 32767
+.word 440
+.word 0
+//
+.word 494
+.word 32767
+.word 494
+.word 0
+.word 494
+.word 0
+//
+.word 440
+.word 32767
+.word 440
+.word 0
+.word 440
+.word 0
+//
+.word 392
+.word 32767
+.word 392
+.word 0
